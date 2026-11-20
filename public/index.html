@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7ed">
+  <meta name="description" content="Ôn tập học kỳ I lớp 2, làm bài trắc nghiệm và sưu tập sticker Ronaldo.">
+  <title>Lớp học của Trường Sơn</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="bar">
+      <button class="brand" data-view="home"><span class="logo">⚽</span><span>Lớp học của<br><b>Trường Sơn</b></span></button>
+      <nav id="navigation" hidden aria-label="Điều hướng">
+        <button data-view="home">Ôn tập</button><button data-view="shop">Đổi quà</button><button data-view="history">Lịch sử</button>
+      </nav>
+      <div id="account"></div>
+    </div>
+  </header>
+  <main id="app" class="shell"></main>
+  <footer class="shell foot"><span>⚽ Lớp học của Trường Sơn</span><a href="/nguon.html">Nguồn đối chiếu</a></footer>
+  <div id="effects" aria-hidden="true"></div>
+  <dialog id="confirm"><form method="dialog"><h2>Đổi phần thưởng?</h2><p id="confirm-text"></p><div class="actions"><button class="secondary" value="cancel">Quay lại</button><button class="primary" value="yes">Xác nhận đổi</button></div></form></dialog>
+</body>
+</html>

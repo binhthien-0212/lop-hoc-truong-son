@@ -1,0 +1,7 @@
+{
+  "name": "lop-hoc-truong-son",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "dependencies": { "@netlify/blobs": "11.1.9" }
+}
