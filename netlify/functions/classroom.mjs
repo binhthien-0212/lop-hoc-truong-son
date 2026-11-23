@@ -2,6 +2,8 @@ import {getStore} from "@netlify/blobs";
 import {createHash} from "node:crypto";
 import {catalog, rewards, getQuiz} from "../../game.mjs";
 
+import {parentActions, parentOperation, publicProfile} from "../../parents.mjs";
+
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const respond = (status, data) => Response.json(data, {status, headers: {"Cache-Control": "no-store"}});
 const failure = (status, message) => respond(status, {error: message});
@@ -20,7 +22,7 @@ function orderedQuiz(id, token, key) {
   });
 }
 
-export function createHandler(openStore) {
+export function createHandler(openStore, getSetupCode = () => process.env.PARENT_SETUP_CODE) {
   return async function classroom(request) {
     if (request.method !== "POST") return failure(405, "Dùng phương thức POST.");
     let body;
@@ -40,14 +42,14 @@ export function createHandler(openStore) {
     const key = createHash("sha256").update(normalized).digest("hex");
     const lesson = catalog.find(item => item.id === id);
     const prize = rewards.find(item => item.id === id);
-    if (action !== "profile" && (typeof token !== "string" || !uuid.test(token))) {
+    if (["quiz", "submit", "redeem", "gift"].includes(action) && (typeof token !== "string" || !uuid.test(token))) {
       return failure(400, "Mã lượt không hợp lệ.");
     }
     const quiz = lesson && orderedQuiz(id, token, key);
     if (action === "quiz" && quiz) {
       return respond(200, {questions: quiz.map(({answer, ...question}) => question)});
     }
-    if (action !== "profile" && action !== "submit" && action !== "redeem") {
+    if (action !== "profile" && action !== "submit" && action !== "redeem" && !parentActions.has(action)) {
       return failure(400, "Thao tác không hợp lệ.");
     }
     if (action === "submit" && (!quiz || !Array.isArray(answers) || answers.length !== 10
@@ -60,16 +62,23 @@ export function createHandler(openStore) {
       const store = openStore();
       if (action === "profile") {
         const profile = await store.get(key, {type: "json"});
-        return respond(200, {profile: profile ?? empty(), catalog, rewards});
+        return respond(200, {profile: publicProfile(profile ?? empty()), catalog, rewards});
       }
 
       for (let retry = 0; retry < 10; retry++) {
         const entry = await store.getWithMetadata(key, {type: "json"});
         const profile = entry?.data ?? empty();
+        const condition = entry ? {onlyIfMatch: entry.etag} : {onlyIfNew: true};
+        if (parentActions.has(action)) {
+          const operation = await parentOperation(profile, body, getSetupCode());
+          if (operation.save && !(await store.setJSON(key, profile, condition)).modified) continue;
+          if (operation.error) return failure(operation.status, operation.error);
+          return respond(200, {profile: publicProfile(profile), result: operation.result});
+        }
         const previous = profile.history.find(item => item.token === token);
         if (previous) {
           if (previous.kind !== action || previous.id !== id) return failure(409, "Mã lượt đã được sử dụng.");
-          return respond(200, {profile, result: previous});
+          return respond(200, {profile: publicProfile(profile), result: previous});
         }
 
         let result;
@@ -86,9 +95,8 @@ export function createHandler(openStore) {
         }
         result = {...result, token, id, kind: action, date: new Date().toISOString()};
         profile.history.unshift(result);
-        const condition = entry ? {onlyIfMatch: entry.etag} : {onlyIfNew: true};
         const write = await store.setJSON(key, profile, condition);
-        if (write.modified) return respond(200, {profile, result});
+        if (write.modified) return respond(200, {profile: publicProfile(profile), result});
         await new Promise(resolve => setTimeout(resolve, 15 * (retry + 1) + Math.random() * 30));
       }
       return failure(503, "Có nhiều thay đổi cùng lúc. Hãy thử lại.");
