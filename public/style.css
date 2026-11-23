@@ -13,3 +13,5 @@
 
 .hero h1{overflow-wrap:anywhere}audio{max-width:100%}.lesson span{white-space:normal;text-align:right}
 .subject h3{margin-bottom:4px}.subject-count{font-size:.9rem;margin-bottom:12px}.page-select{width:100%;font:inherit;font-weight:700;color:var(--green);border:1px solid var(--line);border-radius:10px;background:#f7fbf4;padding:10px;margin-bottom:4px}.page-select:focus-visible{outline:3px solid #647cff;outline-offset:2px}.lesson b{min-width:0}.lesson small{display:block;color:var(--muted);font-size:.75rem;margin-bottom:3px}.lesson span{flex:0 0 auto;max-width:36%}
+
+.parent-panel{max-width:720px;margin:auto}.parent-panel h1{font-size:clamp(2rem,5vw,3rem)}.parent-form{display:grid;gap:14px;margin-block:12px;max-width:480px}.parent-form label,.parent-select{display:grid;gap:6px;font-weight:700}.parent-form input,.parent-form textarea{width:100%;padding:10px;border:1px solid #8ca490;border-radius:10px;font:inherit}.parent-form button{justify-self:start}.parent-select{max-width:220px}.records li p{margin:6px 0 0;overflow-wrap:anywhere}

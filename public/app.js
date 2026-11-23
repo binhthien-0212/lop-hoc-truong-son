@@ -15,6 +15,9 @@ let quiz;
 let busy = false;
 let update = 0;
 let redemption;
+let parentRole = "dad";
+let parentPassword = "";
+let pendingGift = null;
 const subjectPages = new Map();
 const lessonsPerPage = 5;
 const date = new Intl.DateTimeFormat("vi-VN", {dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh"});
@@ -174,17 +177,77 @@ function shop() {
       '" data-prize="' + prize.id + '" ' + (canBuy ? "" : "disabled") + '>' + (canBuy ? "Đổi quà" : "Chưa đủ sticker") + '</button></article>';
   }).join("");
   app.innerHTML = '<h1>Đổi quà</h1><p class="subtitle">Em có <b>' + state.profile.balance + '</b> sticker Ronaldo.</p>' + status +
-    '<div class="reward-grid">' + cards + '</div>';
+    '<p><button class="secondary" data-view="parents">Bố hoặc mẹ tặng sticker</button></p><div class="reward-grid">' + cards + '</div>';
+}
+
+function parentPage() {
+  const label = parentRole === "dad" ? "Bố" : "Mẹ";
+  const configured = state.profile.parents?.[parentRole];
+  const password = (name, caption, autocomplete = "current-password") =>
+    '<label>' + caption + '<input type="password" name="' + name + '" autocomplete="' + autocomplete + '" minlength="8" maxlength="128" required></label>';
+  const fresh = name => password(name, "Mật khẩu mới", "new-password") + password("confirmation", "Nhập lại mật khẩu mới", "new-password");
+  const button = text => '<button class="primary">' + text + '</button>';
+  const form = (action, fields) => '<form class="parent-form" data-parent="' + action + '">' + fields + '</form>';
+  const choice = '<label class="parent-select">Vai trò <select class="page-select" id="parent-role">' +
+    ["dad","mom"].map(role => '<option value="' + role + '"' + (role === parentRole ? ' selected' : '') + '>' +
+    (role === "dad" ? "Bố" : "Mẹ") + '</option>').join("") + '</select></label>';
+  const content = parentPassword
+    ? '<h2>' + label + ' tặng sticker</h2>' +
+      form("gift", '<label>Số sticker Ronaldo<input type="number" name="amount" min="1" step="1" required></label>' +
+        '<label>Lý do tặng<textarea name="reason" rows="3" maxlength="300" required></textarea></label>' + button("Tặng sticker")) +
+      '<details><summary>Đổi mật khẩu</summary>' + form("parent-password", password("password","Mật khẩu cũ") +
+        fresh("newPassword") + button("Lưu mật khẩu mới")) + '</details>' +
+      '<p class="section"><button class="secondary" data-parent-lock>Đăng xuất mục tặng sticker</button></p>'
+    : choice + (configured
+      ? form("parent-login", password("password", "Mật khẩu của " + label.toLowerCase()) + button("Đăng nhập"))
+      : form("parent-setup", '<p class="muted">Thiết lập lần đầu cho ' + label.toLowerCase() + ' bằng mã thiết lập trên Netlify.</p>' +
+        '<label>Mã thiết lập<input type="password" name="setupCode" autocomplete="off" maxlength="128" required></label>' +
+        fresh("password") + button("Thiết lập mật khẩu")));
+  app.innerHTML = '<section class="panel parent-panel"><p><button class="secondary" data-view="shop">Về mục Đổi quà</button></p>' +
+    '<h1>Tặng sticker</h1><p>Số dư của ' + esc(state.name) + ' · <b>' + state.profile.balance + ' Ronaldo</b></p>' + status + content + '</section>';
+}
+
+function parentSubmit(event) {
+  const form = event.target;
+  const action = form.dataset.parent;
+  if (!action) return;
+  event.preventDefault();
+  locked(form.querySelector("button"), async () => {
+    const {confirmation, ...payload} = Object.fromEntries(new FormData(form));
+    if (confirmation !== undefined && confirmation !== (payload.newPassword ?? payload.password)) {
+      throw new Error("Hai lần nhập mật khẩu chưa khớp.");
+    }
+    payload.role = parentRole;
+    if (action === "gift") {
+      payload.password = parentPassword;
+      payload.amount = Number(payload.amount);
+      const key = JSON.stringify([parentRole, payload.amount, payload.reason.trim()]);
+      if (pendingGift?.key !== key) pendingGift = {key, token:crypto.randomUUID()};
+      payload.token = pendingGift.token;
+    }
+    update++;
+    const data = await api(action, payload);
+    state.profile = data.profile;
+    if (action === "parent-setup" || action === "parent-login") parentPassword = payload.password;
+    if (action === "parent-password") parentPassword = payload.newPassword;
+    if (action === "gift") {
+      pendingGift = null;
+      parentPassword = "";
+    }
+    render();
+    if (action === "gift") report("Đã tặng " + data.result.amount + " sticker Ronaldo.", true);
+    if (action === "parent-password") report("Đã đổi mật khẩu.", true);
+  });
 }
 
 function history() {
-  const groups = [["submit", "Bài đã làm", "Em chưa nộp bài nào."], ["redeem", "Phần thưởng đã đổi", "Em chưa đổi phần thưởng nào."]];
+  const groups = [["submit", "Bài đã làm", "Em chưa nộp bài nào."], ["redeem", "Phần thưởng đã đổi", "Em chưa đổi phần thưởng nào."], ["gift", "Sticker bố mẹ tặng", "Chưa có sticker được tặng."]];
   app.innerHTML = '<h1>Lịch sử</h1><p class="subtitle">Bài làm và phần thưởng của ' + esc(state.name) + '.</p>' + status +
     groups.map(([kind, title, blank]) => {
       const items = state.profile.history.filter(record => record.kind === kind).map(record => {
-        const detail = kind === "submit" ? record.score + '/10 · +' + record.earned : '−' + record.cost;
+        const detail = kind === "submit" ? record.score + '/10 · +' + record.earned : kind === "gift" ? "+" + record.amount : "−" + record.cost;
         return '<li><div><strong>' + esc(record.title) + '</strong><small>' + date.format(new Date(record.date)) +
-          '</small></div><strong>' + detail + '</strong></li>';
+          '</small>' + (kind === 'gift' ? '<p>' + esc(record.reason) + '</p>' : '') + '</div><strong>' + detail + '</strong></li>';
       }).join("");
       return '<section class="section panel"><h2>' + title + '</h2>' +
         (items ? '<ul class="records">' + items + '</ul>' : '<p class="muted">' + blank + '</p>') + '</section>';
@@ -195,6 +258,7 @@ function render() {
   header();
   if (view === "shop") shop();
   else if (view === "history") history();
+  else if (view === "parents") parentPage();
   else if (view === "quiz") play();
   else home();
 }
@@ -277,7 +341,14 @@ confirmBox.addEventListener("close", () => {
   });
 });
 
+app.addEventListener("submit", parentSubmit);
 app.addEventListener("change", event => {
+  if (event.target.id === "parent-role" && !busy) {
+    parentRole = event.target.value;
+    parentPage();
+    document.querySelector("#parent-role").focus();
+    return;
+  }
   const subject = event.target.dataset.subjectPage;
   if (!subject || busy) return;
   subjectPages.set(subject, Number(event.target.value));
@@ -288,12 +359,20 @@ app.addEventListener("change", event => {
 document.addEventListener("click", event => {
   const button = event.target.closest("button");
   if (!button || busy) return;
+  if (button.hasAttribute("data-parent-lock")) {
+    parentPassword = "";
+    parentPage();
+    return;
+  }
+  if (button.dataset.view || button.hasAttribute("data-logout")) parentPassword = "";
   if (button.hasAttribute("data-logout")) {
     update++;
     state = {name: "", profile: null, catalog: [], rewards: []};
     quiz = undefined;
     redemption = undefined;
     subjectPages.clear();
+    parentRole = "dad";
+    pendingGift = null;
     try { localStorage.removeItem("classroom-name"); } catch {}
     view = "home";
     render();
